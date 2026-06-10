@@ -1,2 +1,2 @@
-node_modules
-.env
+siraly-engine/node_modules
+siraly-engine/.env
