@@ -61,9 +61,7 @@ function calcPhysics(boatClass, sails, trim, hdg, windDir, windSpeedKn) {
   const absTwa = Math.abs(twa)
   const polar = boatClass==='ys3' ? YS3_POLAR : boatClass==='ys2' ? YS2_POLAR : YS1_POLAR
   const idealSpeed = interpolatePolar(polar, absTwa, windSpeedKn)
-  const trimValues = [trim.mainsheet, trim.boomvang, trim.backstay, trim.cunningham]
-  const avgTrim = trimValues.reduce((a,b)=>a+b,0)/trimValues.length
-  const trimEff = Math.max(20, Math.min(100, avgTrim))
+  const trimEff = calcTrimEfficiency(trim, twa, windSpeedKn, sails)
   const trimMult = 0.6+(trimEff/100)*0.4
   const fSide = windSpeedKn*Math.sin((absTwa*Math.PI)/180)
   const trimPenalty = 1-trimEff/100
@@ -74,7 +72,26 @@ function calcPhysics(boatClass, sails, trim, hdg, windDir, windSpeedKn) {
   return { boatSpeed: Math.round(boatSpeed*100)/100, driftAngle: Math.round(driftAngle*10)/10 }
 }
 
-// Két pont közötti távolság km-ben (Haversine)
+// Optimális trim értékek szélirány alapján (ugyanaz mint a frontenden)
+function calcOptimalTrim(twa, tws) {
+  const abs = Math.abs(twa)
+  if (abs < 70)  return { mainsheet: 85, jibtrim: 80, boomvang: 60, backstay: 75, cunningham: 50, spinnshot: 0,  genakkershot: 0  }
+  if (abs < 110) return { mainsheet: 65, jibtrim: 55, boomvang: 45, backstay: 50, cunningham: 30, spinnshot: 0,  genakkershot: 0  }
+  if (abs < 150) return { mainsheet: 45, jibtrim: 35, boomvang: 70, backstay: 30, cunningham: 15, spinnshot: 50, genakkershot: 50 }
+  return           { mainsheet: 30, jibtrim: 20, boomvang: 85, backstay: 20, cunningham: 10, spinnshot: 30, genakkershot: 0  }
+}
+
+// Trim hatékonyság: az optimumtól való átlagos eltérés alapján
+function calcTrimEfficiency(trim, twa, tws, sails) {
+  const optimal = calcOptimalTrim(twa, tws)
+  const keys = ['mainsheet', 'boomvang', 'backstay', 'cunningham']
+  if (sails.fock || sails.genua) keys.push('jibtrim')
+  if (sails.spinn) keys.push('spinnshot')
+  if (sails.genakker) keys.push('genakkershot')
+  const diffs = keys.map(k => Math.abs((trim[k] ?? 50) - (optimal[k] ?? 50)))
+  const avgDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length
+  return Math.max(20, Math.round((1 - avgDiff / 100) * 100))
+}
 function distanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371
   const dLat = (lat2-lat1)*Math.PI/180
