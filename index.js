@@ -128,9 +128,66 @@ async function getCoursePoints(race) {
 
 async function engineTick() {
   try {
+    // Auto-aktiválás: published verseny aminek lejárt a scheduled_start
+    try {
+      const now = new Date().toISOString()
+      const publishedRaces = await pb.collection('races').getFullList({
+        filter: `status='published' && scheduled_start != "" && scheduled_start <= "${now}"`
+      })
+      for (const race of publishedRaces) {
+        await pb.collection('races').update(race.id, { status: 'active' })
+        console.log(`[AUTO-AKTÍV] ${race.name} → active`)
+      }
+    } catch {}
+
     const races = await pb.collection('races').getFullList({ filter:"status='active'" })
 
     for (const race of races) {
+      // Pálya pontok
+      const coursePoints = await getCoursePoints(race)
+
+      // Nevezők akik elindultak de még nincs race_positions rekordjuk
+      try {
+        const startedPrs = await pb.collection('player_races').getFullList({
+          filter: `race_id="${race.id}" && started_at != ""`
+        })
+        for (const pr of startedPrs) {
+          const existingPos = await pb.collection('race_positions').getFullList({
+            filter: `race_id="${race.id}" && player_id="${pr.player_id}"`
+          })
+          if (existingPos.length === 0 && coursePoints && coursePoints.length > 0) {
+            const boat = await pb.collection('boats').getOne(pr.boat_id).catch(() => null)
+            const classId = boat?.class_id || ''
+            await pb.collection('race_positions').create({
+              race_id: race.id,
+              player_id: pr.player_id,
+              lat: coursePoints[0].lat,
+              lng: coursePoints[0].lng,
+              cp_index: 0,
+              speed_kmh: 0,
+              heading_deg: 270,
+              drift_angle: 0,
+              status: 'racing',
+              boat_class: classId,
+              sail_gross: true,
+              sail_fock: true,
+              sail_genua: false,
+              sail_spinn_bool: false,
+              sail_genakker: false,
+              trim_mainsheet: 78,
+              trim_jibtrim: 64,
+              trim_boomvang: 52,
+              trim_backstay: 71,
+              trim_cunningham: 40,
+              trim_spinnshot: 50,
+              trim_genakkershot: 50,
+            })
+            console.log(`[POS LÉTREHOZVA] ${pr.player_id} verseny: ${race.name}`)
+          }
+        }
+      } catch (e) {
+        console.error('Pozíció létrehozási hiba:', e?.message)
+      }
       // Időjárás
       let windDir=225, windSpeedKn=10
       try {
@@ -139,9 +196,6 @@ async function engineTick() {
         })
         if (segs.length) { windDir=segs[0].wind_dir; windSpeedKn=segs[0].wind_speed*0.539957 }
       } catch {}
-
-      // Pálya pontok
-      const coursePoints = await getCoursePoints(race)
 
       // Pozíciók
       const positions = await pb.collection('race_positions').getFullList({
