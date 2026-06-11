@@ -382,6 +382,7 @@ async function engineTick() {
             const seg = [...segs].reverse().find(s => s.from_cp_index <= cpIndex) || segs[0]
             posWindDir = seg.wind_dir
             posWindSpeedKn = seg.wind_speed * 0.539957
+            console.log(`[SZÉL] CP:${cpIndex} szegmens from_cp:${seg.from_cp_index} dir:${posWindDir} spd:${Math.round(posWindSpeedKn*10)/10}kn`)
           }
         } catch {}
         const physics = calcPhysics(boatClass, sails, trim, hdg, posWindDir, posWindSpeedKn)
