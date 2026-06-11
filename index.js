@@ -282,6 +282,17 @@ async function engineTick() {
             `race_id="${race.id}" && player_id="${pos.player_id}"`
           )
           if (!pr.started_at) continue  // Még nem nyomta meg a START gombot
+
+          // Időbüntetés letöltése a vízen: a rajt után a hajó egy helyben áll,
+          // amíg a büntetés ideje le nem telik (pl. 60mp = 6 tick, started_at-tól számolva).
+          // Mivel a started_at-tól mérünk, a korai rajt előnye automatikusan kioltódik.
+          const penaltySec = pr.total_time_penality || 0
+          if (penaltySec > 0) {
+            const servedSec = (Date.now() - new Date(pr.started_at).getTime()) / 1000
+            if (servedSec < penaltySec) {
+              continue  // Még tölti a büntetést → nem mozdul (rajtvonalnál, 0 sebesség)
+            }
+          }
         } catch { continue }
 
         const isLastCp = coursePoints && cpIndex >= coursePoints.length - 1
