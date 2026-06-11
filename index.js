@@ -205,13 +205,18 @@ async function engineTick() {
       } catch (e) {
         console.error('Pozíció létrehozási hiba:', e?.message)
       }
-      // Időjárás
+      // Időjárás — az aktuális CP szegmens alapján
+      // Alapértelmezett
       let windDir=225, windSpeedKn=10
       try {
         const segs = await pb.collection('weather_segments').getFullList({
           filter:`race_id="${race.id}"`, sort:'from_cp_index',
         })
-        if (segs.length) { windDir=segs[0].wind_dir; windSpeedKn=segs[0].wind_speed*0.539957 }
+        if (segs.length) {
+          // Minden pozícióhoz majd egyénileg töltjük, itt csak alapértelmezett
+          windDir = segs[0].wind_dir
+          windSpeedKn = segs[0].wind_speed * 0.539957
+        }
       } catch {}
 
       // Pozíciók
@@ -289,7 +294,7 @@ async function engineTick() {
 
           // CP elérés ellenőrzése (200m-en belül)
           const dist = distanceKm(lat, lng, nextCp.lat, nextCp.lng)
-          if (dist < 0.2) {
+          if (dist < 0.05) {
             cpIndex = Math.min(cpIndex+1, coursePoints.length-1)
             console.log(`[CP] ${pos.player_id} elérte CP ${cpIndex}-t`)
 
@@ -366,8 +371,20 @@ async function engineTick() {
           continue
         }
 
-        // Fizika számítás
-        const physics = calcPhysics(boatClass, sails, trim, hdg, windDir, windSpeedKn)
+        // Fizika számítás — időjárás a CP index alapján
+        let posWindDir = windDir, posWindSpeedKn = windSpeedKn
+        try {
+          const segs = await pb.collection('weather_segments').getFullList({
+            filter:`race_id="${race.id}"`, sort:'from_cp_index',
+          })
+          if (segs.length) {
+            // Az aktuális CP-hez tartozó szegmens: from_cp_index <= cpIndex
+            const seg = [...segs].reverse().find(s => s.from_cp_index <= cpIndex) || segs[0]
+            posWindDir = seg.wind_dir
+            posWindSpeedKn = seg.wind_speed * 0.539957
+          }
+        } catch {}
+        const physics = calcPhysics(boatClass, sails, trim, hdg, posWindDir, posWindSpeedKn)
         const speedKmh = physics.boatSpeed * 1.852
 
         // Pozíció frissítése
