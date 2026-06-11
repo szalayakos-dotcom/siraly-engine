@@ -283,15 +283,12 @@ async function engineTick() {
           )
           if (!pr.started_at) continue  // Még nem nyomta meg a START gombot
 
-          // Időbüntetés letöltése a vízen: a rajt után a hajó egy helyben áll,
-          // amíg a büntetés ideje le nem telik (pl. 60mp = 6 tick, started_at-tól számolva).
-          // Mivel a started_at-tól mérünk, a korai rajt előnye automatikusan kioltódik.
-          const penaltySec = pr.total_time_penality || 0
-          if (penaltySec > 0) {
-            const servedSec = (Date.now() - new Date(pr.started_at).getTime()) / 1000
-            if (servedSec < penaltySec) {
-              continue  // Még tölti a büntetést → nem mozdul (rajtvonalnál, 0 sebesség)
-            }
+          // Időbüntetés letöltése a vízen: amíg a penalty_until a jövőben van,
+          // a hajó egy helyben áll (rajtnál vagy a pálya közepén — ahol épp van).
+          // Korai rajt: penalty_until = T-0 + 60mp. Vitorlacsere: most + 30mp.
+          if (pr.penalty_until) {
+            const untilMs = new Date(pr.penalty_until).getTime()
+            if (Date.now() < untilMs) continue  // Még tölti a büntetést → nem mozdul
           }
         } catch { continue }
 
