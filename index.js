@@ -133,7 +133,7 @@ async function getCoursePoints(race) {
     const points = typeof course.points === 'string' ? JSON.parse(course.points || '[]') : (course.points || [])
     // Csak start/checkpoint/finish típusú pontok, order szerint rendezve
     const mainPts = points
-      .filter(p => p.type === 'start' || p.type === 'checkpoint' || p.type === 'finish')
+      .filter(p => p.type === 'start' || p.type === 'waypoint' || p.type === 'checkpoint' || p.type === 'finish')
       .sort((a, b) => a.order - b.order)
     courseCache[race.id] = mainPts
     return mainPts
@@ -296,16 +296,19 @@ async function engineTick() {
           const dist = distanceKm(lat, lng, nextCp.lat, nextCp.lng)
           if (dist < 0.05) {
             cpIndex = Math.min(cpIndex+1, coursePoints.length-1)
-            console.log(`[CP] ${pos.player_id} elérte CP ${cpIndex}-t`)
+            const reachedPoint = coursePoints[cpIndex]
+            console.log(`[CP] ${pos.player_id} elérte: ${reachedPoint?.type} ${cpIndex}`)
 
-            // CP kredit jóváírás (minden bojánál 10 kr)
-            try {
-              const profile = await pb.collection('player_profiles').getFirstListItem(`user_id="${pos.player_id}"`)
-              await pb.collection('player_profiles').update(profile.id, {
-                credits: (profile.credits || 0) + 10
-              })
-              console.log(`[KREDIT] ${pos.player_id} +10 kr (CP ${cpIndex})`)
-            } catch {}
+            // CP kredit jóváírás — csak checkpoint típusnál (waypoint-nál nem)
+            if (reachedPoint?.type === 'checkpoint') {
+              try {
+                const profile = await pb.collection('player_profiles').getFirstListItem(`player_id="${pos.player_id}"`)
+                await pb.collection('player_profiles').update(profile.id, {
+                  credits: (profile.credits || 0) + 10
+                })
+                console.log(`[KREDIT] ${pos.player_id} +10 kr (CP ${cpIndex})`)
+              } catch {}
+            }
 
             // Cél elérés — verseny vége
             if (cpIndex >= coursePoints.length - 1) {
@@ -330,7 +333,7 @@ async function engineTick() {
               // Kredit + XP jóváírás
               if (bonusCredits > 0 || bonusXp > 0) {
                 try {
-                  const profile = await pb.collection('player_profiles').getFirstListItem(`user_id="${pos.player_id}"`)
+                  const profile = await pb.collection('player_profiles').getFirstListItem(`player_id="${pos.player_id}"`)
                   await pb.collection('player_profiles').update(profile.id, {
                     credits: (profile.credits || 0) + bonusCredits,
                     xp: (profile.xp || 0) + bonusXp,
